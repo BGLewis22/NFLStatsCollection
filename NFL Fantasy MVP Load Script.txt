@@ -1,0 +1,236 @@
+
+//Load in individual stats
+
+Stats:
+LOAD 
+//	 Rk, 
+     Player, 
+     Pos, 
+     Age, 
+     Date, 
+//     Lg, 
+     Tm, 
+//     [Unnamed: 7], 
+     Opp, 
+//     Result, 
+     G#, 
+     Week, 
+     Day, 
+     Cmp, 
+     Att as PassAtt, 
+     Cmp%, 
+     Yds as PassYds, 
+     TD as PassTD, 
+     Int, 
+     Rate as QBRating, 
+     Sk, 
+     Yds.1 as SkYds
+//     [Y/A], 
+//     [AY/A]
+FROM
+[C:\Users\bglew\OneDrive\Documents\NFL\Passing.csv]
+(txt, codepage is 1252, embedded labels, delimiter is ',', msq);
+
+Concatenate(Stats)
+LOAD 
+//	 Rk, 
+     Player, 
+     Pos, 
+     Age, 
+     Date, 
+//     Lg, 
+     Tm, 
+//     [Unnamed: 7], 
+     Opp, 
+//     Result, 
+     G#, 
+     Week, 
+     Day, 
+     Cmp, 
+     Att as PassAtt, 
+     Cmp%, 
+     Yds as PassYds, 
+     TD as PassTD, 
+     Int, 
+     Rate as QBRating, 
+     Sk, 
+     Yds.1 as SkYds
+//     [Y/A], 
+//     [AY/A]
+FROM
+[C:\Users\bglew\OneDrive\Documents\NFL\Passing2.csv]
+(txt, codepage is 1252, embedded labels, delimiter is ',', msq);
+
+Outer Join(Stats)
+LOAD 
+//	 Rk, 
+     Player, 
+     Pos, 
+     Age, 
+     Date, 
+//     Lg, 
+     Tm, 
+//     [Unnamed: 7], 
+     Opp, 
+//     Result, 
+     G#, 
+     Week, 
+     Day, 
+     Tgt, 
+     Rec, 
+     Yds as RecYds, 
+//     [Y/R], 
+     TD as RecTD
+//     Ctch%, 
+//     [Y/Tgt]
+FROM
+[C:\Users\bglew\OneDrive\Documents\NFL\Receiving.csv]
+(txt, codepage is 1252, embedded labels, delimiter is ',', msq);
+
+Outer Join(Stats)
+LOAD 
+//	Rk, 
+     Player, 
+     Pos, 
+     Age, 
+     Date, 
+//     Lg, 
+     Tm, 
+//     [Unnamed: 7], 
+     Opp, 
+//     Result, 
+     G#, 
+     Week, 
+     Day, 
+     Att as RushAtt, 
+     Yds as RushYds, 
+//     [Y/A], 
+     TD as RushTD
+FROM
+[C:\Users\bglew\OneDrive\Documents\NFL\Rushing.csv]
+(txt, codepage is 1252, embedded labels, delimiter is ',', msq);
+
+//Store out combined stats for other uses.
+
+Store Stats into C:\Users\bglew\OneDrive\Documents\QlikView\XLS\NFLStats.csv (txt);
+
+Drop Table Stats;
+
+//Reload in stats
+
+Stats0:
+LOAD 
+	 GameDate, 
+     PlayerName, 
+     Position, 
+     PlayerTeam, 
+     Opponent, 
+     Week, 
+     Season,
+//     Att, 
+//     Cmp, 
+     PassYds, 
+     PassTD, 
+     Int, 
+     RushYds, 
+     RushTD, 
+     Targets, 
+     Rec, 
+     RecYds, 
+     RecTD
+FROM
+[C:\Users\bglew\OneDrive\Documents\QlikView\XLS\NFLStats.csv]
+(txt, utf8, embedded labels, delimiter is ',', msq);
+
+//Total up counting statistics.
+
+Stats:
+NoConcatenate
+Load
+	 GameDate, 
+     PlayerName, 
+     Position, 
+     PlayerTeam, 
+     Opponent, 
+     Week, 
+     Season,
+     Sum(PassYds) as PassYds,
+     Sum(PassTD) as PassTD,
+     Sum(Int) as Int,
+     Sum(RushYds) as RushYds,
+     Sum(RushTD) as RushTD,
+     Sum(Rec) as Rec,
+     Sum(RecYds) as RecYds,
+     Sum(RecTD) as RecTD
+Resident Stats0
+Group by   GameDate, 
+     PlayerName, 
+     Position, 
+     PlayerTeam, 
+     Opponent, 
+     Week, 
+     Season;
+     
+Drop Table Stats0;  
+
+//Calculate number of weeks in each season played by each team.
+
+WeekTemp:
+Load
+PlayerTeam,
+Season,
+Count(DISTINCT(GameDate)) as MinWeeks
+Resident Stats
+Group by PlayerTeam, Season;
+
+//Calculate minimum number of weeks played by team to find end of regular season. Flag semi-final and finals of fantasy season.
+
+WeekTemp2:
+Load
+Season,
+Min(MinWeeks) as MinWeeksPerSeason,
+Min(MinWeeks)-2 as FantasySemis,
+Min(MinWeeks)-1 as FantasyFinals
+Resident WeekTemp
+Group by Season;
+
+Drop Table WeekTemp;
+
+//Tack on number of weeks to stats table.
+
+Left Join(Stats)
+Load
+*
+Resident WeekTemp2;
+
+Drop Table WeekTemp2;
+
+
+
+//Calculate points in each week excluding playoffs.
+
+Stats2:
+NoConcatenate
+Load
+*,
+4 as PassTDPts,
+.04 as PassYdsPts,
+.5 as RecPts,
+6 as RecTDPts,
+.1 as RecYdsPts,
+6 as RushTDPts,
+.1 as RushYdsPts
+Resident Stats
+Where Week<=MinWeeksPerSeason;
+
+Drop Table Stats;
+
+Stats3:
+Load
+*,
+Alt(PassTDPts*PassTD,0)+Alt(PassYdsPts*PassYds,0)+Alt(RecPts*Rec,0)+Alt(RecTDPts*RecTD,0)+Alt(RecYdsPts*RecYds,0)+Alt(RushTDPts*RushTD,0)+Alt(RushYdsPts*RushYds,0) as Points
+Resident Stats2;
+
+Drop Table Stats2;
+
+
